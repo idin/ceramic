@@ -1,33 +1,46 @@
 from .Xy import Xy
 from .get_cross_validation_by_group import get_cross_validation_by_group
 from .TrainingTestXy import TransformedTrainingTestXy
+from .validate_fold import validate_fold
+
 from nightingale.feature_importance import get_feature_importances
 from nightingale.feature_importance import get_coefficients
 from nightingale.tuning import ModelGrid
 from nightingale.evaluation import evaluate_classification, evaluate_regression
+from nightingale import Predictor
 from ravenclaw.wrangling import bring_to_front
 from copy import deepcopy
 from pandas import DataFrame
 from joblib import Parallel, delayed
 import warnings
 from chronometry.progress import ProgressBar, iterate
+from slytherin.collections import Dictionary
 
 
 class ValidationXy(TransformedTrainingTestXy):
+	_STATE_ATTRIBUTES_ = TransformedTrainingTestXy._STATE_ATTRIBUTES_ + [
+		'_echo', '_num_threads', '_num_validation_splits', '_cross_validation', '_folds', '_random_state'
+	]
+
 	def __init__(
 			self, data, x_columns, y_column, id_columns=None,
 			holdout_ratio=0.2, num_validation_splits=5, random_state=None,
-			transformer=None, num_threads=-1, echo=1
+			transformer=None, num_threads=-1, echo=1, cross_validation=None
 	):
 		self._echo = echo
 		self._num_threads = num_threads
+		self._num_validation_splits = num_validation_splits
+		self._random_state = random_state
 		progress_bar = ProgressBar(total=num_validation_splits + 1, echo=self._echo)
 		progress_amount = 0
 		progress_bar.show(amount=progress_amount, text='preparing validation Xy')
-		cross_validation = get_cross_validation_by_group(
-			data=data, id_columns=id_columns, num_splits=num_validation_splits,
-			holdout_ratio=holdout_ratio, random_state=random_state
-		)
+
+		if cross_validation is None:
+			cross_validation = get_cross_validation_by_group(
+				data=data, id_columns=id_columns, num_splits=num_validation_splits,
+				holdout_ratio=holdout_ratio, random_state=random_state
+			)
+		self._cross_validation = cross_validation
 
 		super().__init__(
 			data=data, x_columns=x_columns, y_column=y_column, id_columns=id_columns,
@@ -43,17 +56,38 @@ class ValidationXy(TransformedTrainingTestXy):
 				training_rows=fold['training'], test_rows=fold['test'], transformer=deepcopy(transformer)
 			)
 
-		if self._num_threads == 1:
+		if self.num_threads == 1:
 			self._folds = [
 				transform_training_test_xy(fold=fold)
 				for fold in iterate(cross_validation['folds'], text='preparing folds (single-threaded)')
 			]
 		else:
-			processor = Parallel(n_jobs=self._num_threads, backend='threading', require='sharedmem')
+			processor = Parallel(n_jobs=self.num_threads, backend='threading', require='sharedmem')
 			self._folds = processor(
 				delayed(transform_training_test_xy)(fold=fold)
 				for fold in iterate(cross_validation['folds'], text='preparing folds (multi-threaded)')
 			)
+
+	@property
+	def num_threads(self):
+		"""
+		:rtype: int
+		"""
+		return self._num_threads
+
+	def replace_data(self, new_data, num_threads=None, echo=None):
+		"""
+		replaces the data with a new_data but keeps the same cross validation
+		:type new_data: DataFrame
+		:rtype: ValidationXy
+		"""
+		num_threads = num_threads or self.num_threads
+		return self.__class__(
+			data=new_data, x_columns=self.x_columns, y_column=self.y_column, id_columns=self.id_columns,
+			holdout_ratio=None, num_validation_splits=self._num_validation_splits, random_state=self._random_state,
+			transformer=self.transformer, num_threads=num_threads, echo=echo or self._echo,
+			cross_validation=self._cross_validation.copy()
+		)
 
 	@property
 	def validation(self):
@@ -90,7 +124,8 @@ class ValidationXy(TransformedTrainingTestXy):
 
 	def validate(
 			self, problem_type, evaluation_function=None, model=None, model_name=None, model_grid=None,
-			num_threads=None, return_models=True, raise_error=False, main_metric=None, best_model_criteria=None,
+			num_threads=None, return_models=False, raise_error=False, main_metric=None,
+			best_model_criteria=None,
 			measure_influence=True, num_influence_points=400,
 			echo=None
 	):
@@ -105,6 +140,7 @@ class ValidationXy(TransformedTrainingTestXy):
 		:param bool return_models: whether or not trained models should be returned
 		:param bool raise_error:
 		:param str main_metric: the metric to be used for choosing the best model
+		:param str or list[str] or NoneType other_metrics: other metrics to be included in the aggregate
 		:param str best_model_criteria: 'highest' means the model with the highest metric value should be chosen
 		:param int or bool or ProgressBar echo:
 		:rtype: dict[str,]
@@ -144,35 +180,6 @@ class ValidationXy(TransformedTrainingTestXy):
 		else:
 			raise ValueError('either a preset model should be given or a model grid')
 
-
-		def validate_fold(model_fold, shared_memory):
-			"""
-			:type fold: TransformedTrainingTestXy
-			:type evaluation_function: callable
-			:type model:
-			:rtype: DataFrame
-			"""
-			shared_memory['progress_bar'].show(amount=shared_memory['progress_amount'], text='validating ...')
-			with warnings.catch_warnings():
-				warnings.simplefilter('ignore')
-
-				this_model = deepcopy(model_fold['model'])
-				fold = model_fold['fold']
-				fold_num = model_fold['fold_num']
-				model_name = model_fold['model_name']
-
-				this_model.fit(X=fold.training.X, y=fold.training.y)
-				training_evaluation = evaluation_function(this_model.predict(fold.training.X), fold.training.y)
-				test_evaluation = evaluation_function(this_model.predict(fold.test.X), fold.test.y)
-			shared_memory['progress_amount'] += 1
-			return {
-				'model': this_model,
-				'model_name': model_name,
-				'fold_num': fold_num,
-				'training_evaluation': training_evaluation,
-				'test_evaluation': test_evaluation
-			}
-
 		model_folds = [
 			{'model_name': model_name, 'model': model, 'fold_num': fold_num + 1, 'fold': fold}
 			for model_name, model in models.items() for fold_num, fold in enumerate(self.folds)
@@ -187,13 +194,16 @@ class ValidationXy(TransformedTrainingTestXy):
 			warnings.simplefilter("ignore")
 			if num_threads == 1:
 				result = [
-					validate_fold(model_fold=model_fold, shared_memory=shared_memory) for model_fold in model_folds
+					validate_fold(model_fold=model_fold, shared_memory=shared_memory, evaluation_function=evaluation_function) for model_fold in model_folds
 				]
 			else:
-				result = Parallel(
-					n_jobs=num_threads, backend='threading', require='sharedmem'
-				)(delayed(validate_fold)(model_fold, shared_memory) for model_fold in model_folds)
-
+				parallel = Parallel(n_jobs=num_threads, backend='threading', require='sharedmem')
+				result = parallel(
+					delayed(validate_fold)(
+						model_fold=model_fold, shared_memory=shared_memory, evaluation_function=evaluation_function
+					)
+				  	for model_fold in model_folds
+				)
 
 		training = []
 		test = []
@@ -226,7 +236,8 @@ class ValidationXy(TransformedTrainingTestXy):
 			if coefficients is not None:
 				coefficients_list.append(coefficients)
 
-			trained_models.append(model)
+			if return_models:
+				trained_models.append(model)
 
 		with warnings.catch_warnings():
 			warnings.simplefilter("ignore")
@@ -236,11 +247,10 @@ class ValidationXy(TransformedTrainingTestXy):
 
 			training = bring_to_front(data=DataFrame.from_records(training), columns=['model_name', 'fold_num'])
 			test = bring_to_front(data=DataFrame.from_records(test), columns=['model_name', 'fold_num'])
-
-			result = {
+			result = Dictionary({
 				'training': training,
 				'test': test
-			}
+			})
 
 			if feature_importances.shape[1] > 0:
 				result['feature_importances'] = bring_to_front(
@@ -265,8 +275,8 @@ class ValidationXy(TransformedTrainingTestXy):
 			shared_memory['progress_bar'].show(amount=shared_memory['progress_amount'], text='validation complete.')
 
 			if main_metric is not None and main_metric in result['test'].columns:
-				aggregated_training = training[['model_name', main_metric]].groupby('model_name').mean().reset_index()
-				aggregated_test = test[['model_name', main_metric]].groupby('model_name').mean().reset_index()
+				aggregated_training = training.drop(columns='fold_num').groupby('model_name').mean().reset_index()
+				aggregated_test = test.drop(columns='fold_num').groupby('model_name').mean().reset_index()
 				aggregated_result = aggregated_training.merge(
 					right=aggregated_test, on='model_name', how='outer', suffixes=['_training', '_test']
 				)
@@ -314,4 +324,8 @@ class ValidationXy(TransformedTrainingTestXy):
 						model=trained_best_model, num_threads=num_threads, num_points=num_influence_points, echo=echo
 					)
 
+		model = result['best_model_trained']
+		transformer = self._transformer
+		predictor = Predictor(model=model, transformer=transformer, model_is_fitted=True, transformer_is_fitted=True, x_columns=self.x_columns)
+		result['predictor'] = predictor
 		return result

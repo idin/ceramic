@@ -1,7 +1,7 @@
 from .Mosaic import Mosaic
 from pandas import DataFrame, Series
 from ravenclaw import is_numeric
-from nightingale.influence import get_model_influence
+from nightingale.feature_importance import get_model_influence
 import warnings
 
 class Xy(Mosaic):
@@ -167,10 +167,10 @@ class Xy(Mosaic):
 		"""
 		return f'C({column})' if self.get_column_type(column=column) == 'categorical' else column
 
-	def get_influence(self, model, num_points=500, num_threads=1, echo=1):
+	def get_influence(self, model, x_columns=None, num_points=500, num_threads=1, echo=1):
 		with warnings.catch_warnings():
 			warnings.simplefilter("ignore")
 			return get_model_influence(
-				model=model, data=self.X, x_columns=self.x_columns, num_points=num_points,
+				model=model, data=self.X, x_columns=x_columns or self.x_columns, num_points=num_points,
 				num_threads=num_threads, echo=echo
 			)
