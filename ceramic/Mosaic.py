@@ -3,6 +3,8 @@ from pandas import DataFrame, concat
 
 
 class Mosaic:
+	_STATE_ATTRIBUTES_ = ['_row_groups', '_column_groups', '_original_data']
+
 	def __init__(self, data, row_groups=None, column_groups=None):
 		"""
 		:type data: DataFrame
@@ -80,8 +82,6 @@ class Mosaic:
 		row_groups = {x: self._row_groups[x] for x in rows}
 		column_groups = {y: self._column_groups[y] for y in columns}
 		return self.__class__(data=self.original_data, row_groups=row_groups, column_groups=column_groups)
-
-	_STATE_ATTRIBUTES_ = ['_row_groups', '_column_groups', '_original_data']
 
 	def __getstate__(self):
 		return {

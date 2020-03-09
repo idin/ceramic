@@ -1,5 +1,5 @@
 from .Xy import Xy
-
+from .TransformedModel import TransformedModel
 
 
 class TrainingTestXy(Xy):
@@ -42,11 +42,13 @@ class TransformedTrainingTestXy(TrainingTestXy):
 			id_columns = [id_columns]
 
 		if transformer is None:
+			self._original_x_columns = None
 			transformed_data = data
 			transformed_x_columns = x_columns
 			self._original_training_test = None
 
 		else:
+			self._original_x_columns = x_columns.copy()
 			self._original_training_test = TrainingTestXy(
 				data=data, x_columns=x_columns, y_column=y_column, training_rows=training_rows, test_rows=test_rows,
 				id_columns=id_columns, training_name=training_name, test_name=test_name
@@ -55,6 +57,7 @@ class TransformedTrainingTestXy(TrainingTestXy):
 			self._transformer.fit(self._original_training_test[training_name].X)
 			transformed_data = self._transformer.transform(data[x_columns])
 			transformed_x_columns = list(transformed_data.columns)
+
 			if id_columns is not None:
 				for id_column in id_columns:
 					transformed_data[id_column] = data[id_column].values
@@ -69,3 +72,15 @@ class TransformedTrainingTestXy(TrainingTestXy):
 	@property
 	def transformer(self):
 		return self._transformer
+
+	def get_influence(self, model, x_columns=None, num_points=500, num_threads=1, echo=1):
+		x_columns = x_columns or self._original_x_columns
+
+		if self.transformer is not None:
+			transformed_model = TransformedModel(model=model, transformer=self.transformer)
+		else:
+			transformed_model = model
+
+		return super().get_influence(
+			model=transformed_model, x_columns=x_columns, num_points=num_points, num_threads=num_threads, echo=echo
+		)
