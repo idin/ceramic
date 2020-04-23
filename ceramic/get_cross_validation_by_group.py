@@ -1,4 +1,6 @@
 from sklearn.model_selection import train_test_split, KFold
+from pandas import DataFrame
+
 
 def _get_id_data(data, id_columns):
 	new_data = data.copy()
@@ -10,8 +12,11 @@ def _get_id_data(data, id_columns):
 	ids = new_data[id_columns].drop_duplicates()
 	return new_data, id_columns, ids
 
+
 def get_training_test_split_by_group(data, id_columns, test_ratio, random_state=None):
 	new_data, id_columns, ids = _get_id_data(data=data, id_columns=id_columns)
+	if not isinstance(ids, DataFrame):
+		raise TypeError(f'ids is not DataFrame. It is {type(ids)}')
 
 	id_training, id_test = train_test_split(ids, test_size=test_ratio, random_state=random_state)
 	training = id_training.merge(new_data, how='left', on=id_columns)
@@ -19,6 +24,7 @@ def get_training_test_split_by_group(data, id_columns, test_ratio, random_state=
 	training_indices = training['_row_']
 	test_indices = test['_row_']
 	return list(training_indices), list(test_indices)
+
 
 def get_kfold_by_group(data, id_columns, num_splits=5, random_state=None):
 	new_data, id_columns, ids = _get_id_data(data=data, id_columns=id_columns)
@@ -32,6 +38,7 @@ def get_kfold_by_group(data, id_columns, num_splits=5, random_state=None):
 		for training_index, test_index in kfold.split(ids)
 	]
 	return folds
+
 
 def get_cross_validation_by_group(data, id_columns, num_splits=5, holdout_ratio=0.2, random_state=None):
 	if holdout_ratio == 0:
