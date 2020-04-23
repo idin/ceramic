@@ -35,6 +35,9 @@ class ValidationXy(TransformedTrainingTestXy):
 		progress_amount = 0
 		progress_bar.show(amount=progress_amount, text='preparing validation Xy')
 
+		if isinstance(id_columns, str):
+			id_columns = [id_columns]
+
 		if cross_validation is None:
 			cross_validation = get_cross_validation_by_group(
 				data=data, id_columns=id_columns, num_splits=num_validation_splits,
@@ -202,7 +205,7 @@ class ValidationXy(TransformedTrainingTestXy):
 					delayed(validate_fold)(
 						model_fold=model_fold, shared_memory=shared_memory, evaluation_function=evaluation_function
 					)
-				  	for model_fold in model_folds
+					for model_fold in model_folds
 				)
 
 		training = []
