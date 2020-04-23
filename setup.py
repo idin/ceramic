@@ -8,7 +8,7 @@ def readme():
 
 setup(
 	name='ceramic',
-	version='2020.1.15',
+	version='2020.4.6',
 	license='MIT',
 	url='https://github.com/idin/ceramic',
 	author='Idin',

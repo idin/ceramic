@@ -2,12 +2,11 @@ import warnings
 from copy import deepcopy
 
 
-
 def validate_fold(model_fold, shared_memory, evaluation_function):
 	"""
-	:type fold: TransformedTrainingTestXy
+	:type model_fold: dict
+	:type shared_memory: dict
 	:type evaluation_function: callable
-	:type model:
 	:rtype: DataFrame
 	"""
 	shared_memory['progress_bar'].show(amount=shared_memory['progress_amount'], text='validating ...')
@@ -18,8 +17,15 @@ def validate_fold(model_fold, shared_memory, evaluation_function):
 		fold = model_fold['fold']
 		fold_num = model_fold['fold_num']
 		model_name = model_fold['model_name']
+		try:
+			this_model.fit(X=fold.training.X, y=fold.training.y)
+		except Exception as e:
+			print(list(fold.training.y)[0:10])
+			print(fold.training.y.dtype)
+			print('\n'*10)
+			print(fold.data.head())
 
-		this_model.fit(X=fold.training.X, y=fold.training.y)
+			raise e
 		training_evaluation = evaluation_function(this_model.predict(fold.training.X), fold.training.y)
 		test_evaluation = evaluation_function(this_model.predict(fold.test.X), fold.test.y)
 	shared_memory['progress_amount'] += 1
