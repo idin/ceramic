@@ -1,5 +1,5 @@
 from .Xy import Xy
-from .get_cross_validation_by_group import get_cross_validation_by_group
+from .get_cross_validation_by_group import get_cross_validation
 from .TrainingTestXy import TransformedTrainingTestXy
 from .validate_fold import validate_fold
 
@@ -39,7 +39,7 @@ class ValidationXy(TransformedTrainingTestXy):
 			id_columns = [id_columns]
 
 		if cross_validation is None:
-			cross_validation = get_cross_validation_by_group(
+			cross_validation = get_cross_validation(
 				data=data, id_columns=id_columns, num_splits=num_validation_splits,
 				holdout_ratio=holdout_ratio, random_state=random_state
 			)
@@ -129,7 +129,7 @@ class ValidationXy(TransformedTrainingTestXy):
 			self, problem_type, evaluation_function=None, model=None, model_name=None, model_grid=None,
 			num_threads=None, return_models=False, raise_error=False, main_metric=None,
 			best_model_criteria=None,
-			measure_influence=True, num_influence_points=400,
+			measure_influence=False, num_influence_points=400,
 			echo=None
 	):
 		"""
@@ -292,6 +292,7 @@ class ValidationXy(TransformedTrainingTestXy):
 
 				result['aggregate'] = aggregated_result
 				best_model_name = aggregated_result.head(1)['model_name'].values[0]
+				best_result = aggregated_result.head(1)[f'{main_metric}_test'].values[0]
 
 				if parameters_dictionary is not None:
 					result['best_model_parameters'] = parameters_dictionary[best_model_name]

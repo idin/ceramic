@@ -25,7 +25,10 @@ setup(
 		'Topic :: Software Development :: Libraries :: Python Modules'
 	],
 	packages=find_packages(exclude=["jupyter_tests", ".idea", ".git"]),
-	install_requires=['sklearn', 'pandas', 'joblib', 'ravenclaw', 'chronometry', 'nightingale', 'pensieve'],
+	install_requires=[
+		'sklearn', 'pandas', 'joblib',
+		'ravenclaw', 'chronometry', 'nightingale', 'pensieve', 'slytherin'
+	],
 	python_requires='~=3.6',
 	zip_safe=False
 )

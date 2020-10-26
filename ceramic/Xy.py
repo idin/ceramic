@@ -4,6 +4,7 @@ from ravenclaw import is_numeric
 from nightingale.feature_importance import get_model_influence
 import warnings
 
+
 class Xy(Mosaic):
 	def __init__(self, data, x_columns, y_column, id_columns=None, row_groups=None):
 		"""

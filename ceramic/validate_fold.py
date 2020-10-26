@@ -20,6 +20,7 @@ def validate_fold(model_fold, shared_memory, evaluation_function):
 		try:
 			this_model.fit(X=fold.training.X, y=fold.training.y)
 		except Exception as e:
+			print(f'error validation fold with model:"{model_name}"')
 			print(list(fold.training.y)[0:10])
 			print(fold.training.y.dtype)
 			print('\n'*10)

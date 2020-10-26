@@ -26,6 +26,7 @@ class TrainingTestXy(Xy):
 		"""
 		return self['test']
 
+
 class TransformedTrainingTestXy(TrainingTestXy):
 	def __init__(
 			self, data, x_columns, y_column, training_rows=None, test_rows=None, id_columns=None,
